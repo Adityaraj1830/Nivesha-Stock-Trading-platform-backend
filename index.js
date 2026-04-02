@@ -19,6 +19,10 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
+app.get("/", (req, res) => {
+  res.send("Backend is running 🚀");
+});
+
 // app.get('/addHoldings', async(req,res)=>{
 //     let tempHoldings= [
 //   {
