@@ -197,7 +197,7 @@ app.get("/allHoldings", async (req, res) => {
     res.json(allHoldings);
 });
 
-app.get("/allPosiions", async (req, res) => {
+app.get("/allPositions", async (req, res) => {
     let allPosiions = await PositionsModel.find({});
     res.json(allPosiions);
 });
@@ -215,8 +215,11 @@ app.post('/newOrder', async(req,res) => {
   res.send("Order saved!");
 });
 
-app.listen(PORT, () => {
-    console.log("App Started");
-    mongoose.connect(uri);
+mongoose.connect(uri)
+  .then(() => {
     console.log("DB connected!");
-});
+    app.listen(PORT, () => {
+      console.log("App Started");
+    });
+  })
+  .catch(err => console.log(err));
