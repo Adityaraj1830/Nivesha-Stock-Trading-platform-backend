@@ -1,8 +1,7 @@
-require('dotenv').config();
+require("dotenv").config();
 
 const express = require("express");
 const mongoose = require("mongoose");
-const bodyParser = require("body-parser");
 const cors = require("cors");
 
 const { HoldingsModel } = require("./model/HoldingsModel");
@@ -15,64 +14,238 @@ const uri = process.env.MONGO_URL;
 const app = express();
 
 app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json());
+
+const marketData = [
+  {
+    name: "INFY",
+    price: 1555.45,
+    percent: "-1.60%",
+    isDown: true,
+  },
+  {
+    name: "ONGC",
+    price: 116.8,
+    percent: "-0.09%",
+    isDown: true,
+  },
+  {
+    name: "TCS",
+    price: 3194.8,
+    percent: "-0.25%",
+    isDown: true,
+  },
+  {
+    name: "KPITTECH",
+    price: 266.45,
+    percent: "3.54%",
+    isDown: false,
+  },
+  {
+    name: "QUICKHEAL",
+    price: 308.55,
+    percent: "-0.15%",
+    isDown: true,
+  },
+  {
+    name: "WIPRO",
+    price: 577.75,
+    percent: "0.32%",
+    isDown: false,
+  },
+  {
+    name: "M&M",
+    price: 779.8,
+    percent: "-0.01%",
+    isDown: true,
+  },
+  {
+    name: "RELIANCE",
+    price: 2112.4,
+    percent: "1.44%",
+    isDown: false,
+  },
+  {
+    name: "HUL",
+    price: 512.4,
+    percent: "1.04%",
+    isDown: false,
+  },
+  {
+    name: "HINDUNILVR",
+    price: 2417.4,
+    percent: "0.21%",
+    isDown: false,
+  },
+  {
+    name: "SBIN",
+    price: 430.2,
+    percent: "-0.34%",
+    isDown: true,
+  },
+  {
+    name: "ITC",
+    price: 207.9,
+    percent: "0.80%",
+    isDown: false,
+  },
+  {
+    name: "BHARTIARTL",
+    price: 541.15,
+    percent: "2.99%",
+    isDown: false,
+  },
+  {
+    name: "TATAPOWER",
+    price: 124.15,
+    percent: "-0.24%",
+    isDown: true,
+  },
+  {
+    name: "HDFCBANK",
+    price: 1522.35,
+    percent: "0.11%",
+    isDown: false,
+  },
+  {
+    name: "SGBMAY29",
+    price: 4719.0,
+    percent: "0.15%",
+    isDown: false,
+  },
+];
 
 app.get("/", (req, res) => {
   res.send("Backend is running 🚀");
 });
 
+app.get("/market-data", (req, res) => {
+  res.json(marketData);
+});
 
-// ================= HOLDINGS =================
 app.get("/allHoldings", async (req, res) => {
-  const allHoldings = await HoldingsModel.find({});
-  res.json(allHoldings);
-});
-
-
-// ================= POSITIONS =================
-app.get("/allPositions", async (req, res) => {
-  const allPositions = await PositionsModel.find({});
-  res.json(allPositions);
-});
-
-
-// ================= ORDERS =================
-app.get("/allOrders", async (req, res) => {
-  const orders = await OrdersModel.find({});
-  res.json(orders);
-});
-
-
-// ================= BUY / SELL ORDER =================
-app.post('/newOrder', async (req, res) => {
   try {
-    const { name, qty, price, mode } = req.body;
+    const allHoldings = await HoldingsModel.find({});
+    res.json(allHoldings);
+  } catch (error) {
+    console.error("HOLDINGS FETCH ERROR:", error);
 
-    // 1️⃣ Save Order
+    res.status(500).json({
+      message: "Unable to fetch holdings",
+    });
+  }
+});
+
+app.get("/allPositions", async (req, res) => {
+  try {
+    const allPositions = await PositionsModel.find({});
+    res.json(allPositions);
+  } catch (error) {
+    console.error("POSITIONS FETCH ERROR:", error);
+
+    res.status(500).json({
+      message: "Unable to fetch positions",
+    });
+  }
+});
+
+app.get("/allOrders", async (req, res) => {
+  try {
+    const orders = await OrdersModel.find({}).sort({ _id: -1 });
+    res.json(orders);
+  } catch (error) {
+    console.error("ORDERS FETCH ERROR:", error);
+
+    res.status(500).json({
+      message: "Unable to fetch orders",
+    });
+  }
+});
+
+app.post("/newOrder", async (req, res) => {
+  try {
+    let { name, qty, price, mode } = req.body;
+
+    name = name?.trim().toUpperCase();
+    qty = Number(qty);
+    price = Number(price);
+    mode = mode?.trim().toUpperCase();
+
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        message: "Stock name is required",
+      });
+    }
+
+    if (!Number.isInteger(qty) || qty <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Quantity must be a positive whole number",
+      });
+    }
+
+    if (!Number.isFinite(price) || price <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Enter a valid stock price",
+      });
+    }
+
+    if (!["BUY", "SELL"].includes(mode)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order type",
+      });
+    }
+
+    const existingStock = await HoldingsModel.findOne({ name });
+
+    if (mode === "SELL") {
+      if (!existingStock) {
+        return res.status(400).json({
+          success: false,
+          message: `You do not own any shares of ${name}`,
+        });
+      }
+
+      if (qty > existingStock.qty) {
+        return res.status(400).json({
+          success: false,
+          message: `You only own ${existingStock.qty} shares of ${name}`,
+        });
+      }
+    }
+
+    let realizedPnL = 0;
+
+    if (mode === "SELL") {
+      realizedPnL = (price - Number(existingStock.avg)) * qty;
+    }
+
     const newOrder = new OrdersModel({
       name,
       qty,
       price,
       mode,
-      status: "COMPLETED",   // directly executed
+      status: "COMPLETED",
+      realizedPnL,
       time: new Date().toLocaleTimeString(),
     });
 
     await newOrder.save();
 
-
-    // 2️⃣ HANDLE BUY
     if (mode === "BUY") {
-      let existingStock = await HoldingsModel.findOne({ name });
-
       if (existingStock) {
-        const totalQty = existingStock.qty + qty;
-        const totalCost =
-          existingStock.avg * existingStock.qty + price * qty;
+        const oldQuantity = Number(existingStock.qty);
+        const oldAverage = Number(existingStock.avg);
 
-        existingStock.avg = totalCost / totalQty;
-        existingStock.qty = totalQty;
-        existingStock.price = price;
+        const totalQuantity = oldQuantity + qty;
+
+        const totalCost = oldAverage * oldQuantity + price * qty;
+
+        existingStock.qty = totalQuantity;
+        existingStock.avg = totalCost / totalQuantity;
 
         await existingStock.save();
       } else {
@@ -80,7 +253,7 @@ app.post('/newOrder', async (req, res) => {
           name,
           qty,
           avg: price,
-          price: price,
+          price,
           net: "0%",
           day: "0%",
         });
@@ -89,50 +262,78 @@ app.post('/newOrder', async (req, res) => {
       }
     }
 
-
-    // 3️⃣ HANDLE SELL
     if (mode === "SELL") {
-      let existingStock = await HoldingsModel.findOne({ name });
+      const remainingQuantity = Number(existingStock.qty) - qty;
 
-      if (existingStock) {
-        const remainingQty = existingStock.qty - qty;
-
-        if (remainingQty > 0) {
-          existingStock.qty = remainingQty;
-          existingStock.price = price;
-          await existingStock.save();
-        } else {
-          // remove stock completely
-          await HoldingsModel.deleteOne({ name });
-        }
+      if (remainingQuantity === 0) {
+        await HoldingsModel.findByIdAndDelete(existingStock._id);
+      } else {
+        existingStock.qty = remainingQuantity;
+        await existingStock.save();
       }
     }
 
-    res.send("Order executed & holdings updated ✅");
+    return res.status(201).json({
+      success: true,
+      message: `${mode} order executed successfully`,
+      order: newOrder,
+    });
+  } catch (error) {
+    console.error("ORDER ERROR:", error);
 
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Error processing order");
+    return res.status(500).json({
+      success: false,
+      message: "Unable to process order",
+    });
   }
 });
 
-
-// ================= CANCEL ORDER =================
 app.post("/cancelOrder", async (req, res) => {
-  const { id } = req.body;
+  try {
+    const { id } = req.body;
 
-  await OrdersModel.findByIdAndUpdate(id, {
-    status: "CANCELLED",
-  });
+    const order = await OrdersModel.findById(id);
 
-  res.send("Order cancelled");
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    if (order.status === "COMPLETED") {
+      return res.status(400).json({
+        success: false,
+        message: "Completed orders cannot be cancelled",
+      });
+    }
+
+    order.status = "CANCELLED";
+    await order.save();
+
+    return res.json({
+      success: true,
+      message: "Order cancelled successfully",
+    });
+  } catch (error) {
+    console.error("CANCEL ORDER ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to cancel order",
+    });
+  }
 });
 
-mongoose.connect(uri)
+mongoose
+  .connect(uri)
   .then(() => {
     console.log("DB connected!");
+
     app.listen(PORT, () => {
-      console.log("App Started on PORT", PORT);
+      console.log(`App Started on PORT ${PORT}`);
     });
   })
-  .catch(err => console.log(err));
+  .catch((error) => {
+    console.error("DATABASE CONNECTION ERROR:", error);
+  });

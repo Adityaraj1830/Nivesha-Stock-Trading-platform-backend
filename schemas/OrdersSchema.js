@@ -10,6 +10,12 @@ const OrdersSchema = new Schema({
     type: String,
     default: "PENDING",
   },
+
+  realizedPnL: {
+    type: Number,
+    default: 0,
+  },
+
   time: {
     type: String,
     default: () => new Date().toLocaleTimeString(),
