@@ -20,3 +20,8 @@ Thumbs.db
 # Build output (if any)
 dist/
 build/
+
+
+serviceAccountKey.json
+.env
+node_modules/

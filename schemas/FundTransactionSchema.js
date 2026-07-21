@@ -2,6 +2,13 @@ const { Schema } = require("mongoose");
 
 const FundTransactionSchema = new Schema(
   {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "user",
+      required: true,
+      index: true,
+    },
+
     type: {
       type: String,
       enum: ["DEPOSIT", "WITHDRAWAL", "BUY", "SELL"],
