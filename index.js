@@ -5,8 +5,7 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const jwt = require("jsonwebtoken");
-
-const { adminAuth } = require("./firebaseAdmin");
+const bcrypt = require("bcryptjs");
 
 const { HoldingsModel } = require("./model/HoldingsModel");
 const { PositionsModel } = require("./model/PositionsModel");
@@ -29,10 +28,6 @@ app.use(
 
 app.use(express.json());
 app.use(cookieParser());
-
-// ======================================================
-// AUTHENTICATION MIDDLEWARE
-// ======================================================
 
 const authenticateUser = async (req, res, next) => {
   try {
@@ -69,244 +64,375 @@ const authenticateUser = async (req, res, next) => {
   }
 };
 
-// ======================================================
-// MARKET DATA
-// ======================================================
+const createSession = (res, user) => {
+  const sessionToken = jwt.sign(
+    {
+      userId: user._id.toString(),
+    },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: "7d",
+    },
+  );
+
+  res.cookie("nivesha_session", sessionToken, {
+    httpOnly: true,
+    secure: false,
+    sameSite: "lax",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: "/",
+  });
+};
+
+const getPublicUser = (user) => ({
+  id: user._id,
+  name: user.name,
+  username: user.username,
+  email: user.email,
+  accountType: user.accountType,
+  tradingStatus: user.tradingStatus,
+});
 
 const marketData = [
   {
     name: "INFY",
     price: 1555.45,
-    percent: "-1.60%",
-    isDown: true,
+    basePrice: 1555.45,
+    percent: "0.00%",
+    isDown: false,
   },
   {
     name: "ONGC",
     price: 116.8,
-    percent: "-0.09%",
-    isDown: true,
+    basePrice: 116.8,
+    percent: "0.00%",
+    isDown: false,
   },
   {
     name: "TCS",
     price: 3194.8,
-    percent: "-0.25%",
-    isDown: true,
+    basePrice: 3194.8,
+    percent: "0.00%",
+    isDown: false,
   },
   {
     name: "KPITTECH",
     price: 266.45,
-    percent: "3.54%",
+    basePrice: 266.45,
+    percent: "0.00%",
     isDown: false,
   },
   {
     name: "QUICKHEAL",
     price: 308.55,
-    percent: "-0.15%",
-    isDown: true,
+    basePrice: 308.55,
+    percent: "0.00%",
+    isDown: false,
   },
   {
     name: "WIPRO",
     price: 577.75,
-    percent: "0.32%",
+    basePrice: 577.75,
+    percent: "0.00%",
     isDown: false,
   },
   {
     name: "M&M",
     price: 779.8,
-    percent: "-0.01%",
-    isDown: true,
+    basePrice: 779.8,
+    percent: "0.00%",
+    isDown: false,
   },
   {
     name: "RELIANCE",
     price: 2112.4,
-    percent: "1.44%",
+    basePrice: 2112.4,
+    percent: "0.00%",
     isDown: false,
   },
   {
     name: "HUL",
     price: 512.4,
-    percent: "1.04%",
+    basePrice: 512.4,
+    percent: "0.00%",
     isDown: false,
   },
   {
     name: "HINDUNILVR",
     price: 2417.4,
-    percent: "0.21%",
+    basePrice: 2417.4,
+    percent: "0.00%",
     isDown: false,
   },
   {
     name: "SBIN",
     price: 430.2,
-    percent: "-0.34%",
-    isDown: true,
+    basePrice: 430.2,
+    percent: "0.00%",
+    isDown: false,
   },
   {
     name: "ITC",
     price: 207.9,
-    percent: "0.80%",
+    basePrice: 207.9,
+    percent: "0.00%",
     isDown: false,
   },
   {
     name: "BHARTIARTL",
     price: 541.15,
-    percent: "2.99%",
+    basePrice: 541.15,
+    percent: "0.00%",
     isDown: false,
   },
   {
     name: "TATAPOWER",
     price: 124.15,
-    percent: "-0.24%",
-    isDown: true,
+    basePrice: 124.15,
+    percent: "0.00%",
+    isDown: false,
   },
   {
     name: "HDFCBANK",
     price: 1522.35,
-    percent: "0.11%",
+    basePrice: 1522.35,
+    percent: "0.00%",
     isDown: false,
   },
   {
     name: "SGBMAY29",
     price: 4719,
-    percent: "0.15%",
+    basePrice: 4719,
+    percent: "0.00%",
     isDown: false,
   },
   {
     name: "EVEREADY",
     price: 312.35,
-    percent: "-1.24%",
-    isDown: true,
+    basePrice: 312.35,
+    percent: "0.00%",
+    isDown: false,
   },
   {
     name: "JUBLFOOD",
     price: 3082.65,
-    percent: "-1.35%",
-    isDown: true,
+    basePrice: 3082.65,
+    percent: "0.00%",
+    isDown: false,
   },
 ];
 
-// ======================================================
-// SERVER TEST
-// ======================================================
+const updateMarketPrices = () => {
+  marketData.forEach((stock) => {
+    const maximumMovement = stock.basePrice * 0.002;
+
+    const priceMovement = (Math.random() * 2 - 1) * maximumMovement;
+
+    let updatedPrice = stock.price + priceMovement;
+
+    const maximumPrice = stock.basePrice * 1.08;
+    const minimumPrice = stock.basePrice * 0.92;
+
+    if (updatedPrice > maximumPrice) {
+      updatedPrice = maximumPrice;
+    }
+
+    if (updatedPrice < minimumPrice) {
+      updatedPrice = minimumPrice;
+    }
+
+    stock.price = Number(updatedPrice.toFixed(2));
+
+    const percentageChange =
+      ((stock.price - stock.basePrice) / stock.basePrice) * 100;
+
+    stock.percent = `${percentageChange >= 0 ? "+" : ""}${percentageChange.toFixed(
+      2,
+    )}%`;
+
+    stock.isDown = percentageChange < 0;
+  });
+};
+
+setInterval(updateMarketPrices, 10000);
 
 app.get("/", (req, res) => {
   res.send("Backend is running 🚀");
 });
 
-// ======================================================
-// FIREBASE LOGIN
-// ======================================================
-
-app.post("/auth/firebase", async (req, res) => {
+app.post("/auth/signup", async (req, res) => {
   try {
-    const { idToken } = req.body;
+    let { name, username, email, password } = req.body;
 
-    if (!idToken) {
+    name = name?.trim();
+    username = username?.trim().toLowerCase();
+    email = email?.trim().toLowerCase();
+
+    if (!name || name.length < 2) {
       return res.status(400).json({
         success: false,
-        message: "Firebase ID token is required",
+        message: "Please enter your full name",
       });
     }
 
-    const decodedToken = await adminAuth.verifyIdToken(idToken);
+    if (!username || username.length < 3) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID must contain at least 3 characters",
+      });
+    }
 
-    let user = await UserModel.findOne({
-      firebaseUid: decodedToken.uid,
+    const usernamePattern = /^[a-z0-9_]+$/;
+
+    if (!usernamePattern.test(username)) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID can only contain letters, numbers and underscores",
+      });
+    }
+
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!email || !emailPattern.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid email address",
+      });
+    }
+
+    if (!password || password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must contain at least 8 characters",
+      });
+    }
+
+    const existingUser = await UserModel.findOne({
+      $or: [{ email }, { username }],
     });
 
-    if (!user) {
-      user = new UserModel({
-        firebaseUid: decodedToken.uid,
-        phoneNumber: decodedToken.phone_number || "Not available",
+    if (existingUser) {
+      if (existingUser.email === email) {
+        return res.status(409).json({
+          success: false,
+          message: "An account with this email already exists",
+        });
+      }
+
+      return res.status(409).json({
+        success: false,
+        message: "This User ID is already taken",
       });
-
-      await user.save();
-    } else if (
-      decodedToken.phone_number &&
-      user.phoneNumber !== decodedToken.phone_number
-    ) {
-      user.phoneNumber = decodedToken.phone_number;
-
-      await user.save();
     }
 
-    // Create personal funds account for the user
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    const user = await UserModel.create({
+      name,
+      username,
+      email,
+      password: hashedPassword,
+      accountType: "Individual",
+      tradingStatus: "Active",
+    });
+
+    await FundsModel.create({
+      userId: user._id,
+      availableBalance: 100000,
+      totalDeposited: 100000,
+      totalWithdrawn: 0,
+    });
+
+    createSession(res, user);
+
+    return res.status(201).json({
+      success: true,
+      message: "Nivesha account created successfully",
+      user: getPublicUser(user),
+    });
+  } catch (error) {
+    console.error("SIGNUP ERROR:", error);
+
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: "Email or User ID already exists",
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to create your account",
+    });
+  }
+});
+
+app.post("/auth/login", async (req, res) => {
+  try {
+    const email = req.body.email?.trim().toLowerCase();
+    const password = req.body.password;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and password are required",
+      });
+    }
+
+    const user = await UserModel.findOne({ email });
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password",
+      });
+    }
+
+    const isPasswordCorrect = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordCorrect) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password",
+      });
+    }
+
     let funds = await FundsModel.findOne({
       userId: user._id,
     });
 
     if (!funds) {
-      funds = new FundsModel({
+      funds = await FundsModel.create({
         userId: user._id,
         availableBalance: 100000,
         totalDeposited: 100000,
         totalWithdrawn: 0,
       });
-
-      await funds.save();
     }
 
-    const sessionToken = jwt.sign(
-      {
-        userId: user._id.toString(),
-        firebaseUid: user.firebaseUid,
-      },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: "7d",
-      },
-    );
-
-    res.cookie("nivesha_session", sessionToken, {
-      httpOnly: true,
-      secure: false,
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: "/",
-    });
+    createSession(res, user);
 
     return res.status(200).json({
       success: true,
-      message: "User authenticated successfully",
-
-      user: {
-        id: user._id,
-        name: user.name,
-        phoneNumber: user.phoneNumber,
-        accountType: user.accountType,
-        tradingStatus: user.tradingStatus,
-      },
+      message: "Logged in successfully",
+      user: getPublicUser(user),
     });
   } catch (error) {
-    console.error("FIREBASE AUTHENTICATION ERROR:", error);
+    console.error("LOGIN ERROR:", error);
 
-    return res.status(401).json({
+    return res.status(500).json({
       success: false,
-      message: "Authentication failed",
+      message: "Unable to login",
     });
   }
 });
 
-// ======================================================
-// CURRENT USER
-// ======================================================
-
 app.get("/auth/me", authenticateUser, async (req, res) => {
   return res.status(200).json({
     success: true,
-
-    user: {
-      id: req.user._id,
-      name: req.user.name,
-      phoneNumber: req.user.phoneNumber,
-      accountType: req.user.accountType,
-      tradingStatus: req.user.tradingStatus,
-    },
+    user: getPublicUser(req.user),
   });
 });
-
-// ======================================================
-// LOGOUT
-// ======================================================
 
 app.post("/auth/logout", (req, res) => {
   res.clearCookie("nivesha_session", {
@@ -322,17 +448,9 @@ app.post("/auth/logout", (req, res) => {
   });
 });
 
-// ======================================================
-// MARKET DATA ROUTE
-// ======================================================
-
 app.get("/market-data", (req, res) => {
-  res.json(marketData);
+  res.json(marketData.map(({ basePrice, ...stock }) => stock));
 });
-
-// ======================================================
-// GET USER FUNDS
-// ======================================================
 
 app.get("/funds", authenticateUser, async (req, res) => {
   try {
@@ -362,10 +480,6 @@ app.get("/funds", authenticateUser, async (req, res) => {
   }
 });
 
-// ======================================================
-// ADD FUNDS
-// ======================================================
-
 app.post("/addFunds", authenticateUser, async (req, res) => {
   try {
     const amount = Number(req.body.amount);
@@ -393,7 +507,6 @@ app.post("/addFunds", authenticateUser, async (req, res) => {
     }
 
     funds.availableBalance = Number(funds.availableBalance) + amount;
-
     funds.totalDeposited = Number(funds.totalDeposited) + amount;
 
     await funds.save();
@@ -420,10 +533,6 @@ app.post("/addFunds", authenticateUser, async (req, res) => {
     });
   }
 });
-
-// ======================================================
-// WITHDRAW FUNDS
-// ======================================================
 
 app.post("/withdrawFunds", authenticateUser, async (req, res) => {
   try {
@@ -457,7 +566,6 @@ app.post("/withdrawFunds", authenticateUser, async (req, res) => {
     }
 
     funds.availableBalance = Number(funds.availableBalance) - amount;
-
     funds.totalWithdrawn = Number(funds.totalWithdrawn) + amount;
 
     await funds.save();
@@ -485,10 +593,6 @@ app.post("/withdrawFunds", authenticateUser, async (req, res) => {
   }
 });
 
-// ======================================================
-// GET USER FUND TRANSACTIONS
-// ======================================================
-
 app.get("/fund-transactions", authenticateUser, async (req, res) => {
   try {
     const transactions = await FundTransactionModel.find({
@@ -508,10 +612,6 @@ app.get("/fund-transactions", authenticateUser, async (req, res) => {
   }
 });
 
-// ======================================================
-// GET USER HOLDINGS
-// ======================================================
-
 app.get("/allHoldings", authenticateUser, async (req, res) => {
   try {
     const allHoldings = await HoldingsModel.find({
@@ -528,10 +628,6 @@ app.get("/allHoldings", authenticateUser, async (req, res) => {
   }
 });
 
-// ======================================================
-// GET USER POSITIONS
-// ======================================================
-
 app.get("/allPositions", authenticateUser, async (req, res) => {
   try {
     const allPositions = await PositionsModel.find({
@@ -547,10 +643,6 @@ app.get("/allPositions", authenticateUser, async (req, res) => {
     });
   }
 });
-
-// ======================================================
-// GET USER ORDERS
-// ======================================================
 
 app.get("/allOrders", authenticateUser, async (req, res) => {
   try {
@@ -570,22 +662,13 @@ app.get("/allOrders", authenticateUser, async (req, res) => {
   }
 });
 
-// ======================================================
-// PLACE NEW ORDER
-// ======================================================
-
 app.post("/newOrder", authenticateUser, async (req, res) => {
   try {
-    let { name, qty, price, mode, product = "CNC" } = req.body;
+    let { name, qty, mode, product = "CNC" } = req.body;
 
     name = name?.trim().toUpperCase();
-
     qty = Number(qty);
-
-    price = Number(price);
-
     mode = mode?.trim().toUpperCase();
-
     product = product?.trim().toUpperCase();
 
     if (!name) {
@@ -602,13 +685,6 @@ app.post("/newOrder", authenticateUser, async (req, res) => {
       });
     }
 
-    if (!Number.isFinite(price) || price <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Enter a valid stock price",
-      });
-    }
-
     if (!["BUY", "SELL"].includes(mode)) {
       return res.status(400).json({
         success: false,
@@ -622,6 +698,17 @@ app.post("/newOrder", authenticateUser, async (req, res) => {
         message: "Invalid product type",
       });
     }
+
+    const marketStock = marketData.find((stock) => stock.name === name);
+
+    if (!marketStock) {
+      return res.status(400).json({
+        success: false,
+        message: "Stock is not available for trading",
+      });
+    }
+
+    const price = Number(marketStock.price);
 
     const userId = req.user._id;
 
@@ -657,8 +744,6 @@ app.post("/newOrder", authenticateUser, async (req, res) => {
       });
     }
 
-    // BUY VALIDATION
-
     if (mode === "BUY") {
       if (orderValue > Number(funds.availableBalance)) {
         return res.status(400).json({
@@ -668,13 +753,10 @@ app.post("/newOrder", authenticateUser, async (req, res) => {
       }
     }
 
-    // SELL VALIDATION
-
     if (mode === "SELL") {
       if (!existingStock) {
         return res.status(400).json({
           success: false,
-
           message: `You do not own any ${product} shares of ${name}`,
         });
       }
@@ -682,21 +764,16 @@ app.post("/newOrder", authenticateUser, async (req, res) => {
       if (qty > Number(existingStock.qty)) {
         return res.status(400).json({
           success: false,
-
           message: `You only own ${existingStock.qty} shares of ${name}`,
         });
       }
     }
-
-    // CALCULATE REALIZED P&L
 
     let realizedPnL = 0;
 
     if (mode === "SELL") {
       realizedPnL = (price - Number(existingStock.avg)) * qty;
     }
-
-    // CREATE ORDER
 
     const newOrder = new OrdersModel({
       userId,
@@ -712,16 +789,11 @@ app.post("/newOrder", authenticateUser, async (req, res) => {
 
     await newOrder.save();
 
-    // ==================================================
-    // BUY ORDER
-    // ==================================================
-
     if (mode === "BUY") {
       funds.availableBalance = Number(funds.availableBalance) - orderValue;
 
       await funds.save();
 
-      // Record BUY fund transaction
       await FundTransactionModel.create({
         userId,
         type: "BUY",
@@ -731,8 +803,6 @@ app.post("/newOrder", authenticateUser, async (req, res) => {
         description: `${product} BUY - ${qty} shares of ${name}`,
         balanceAfter: funds.availableBalance,
       });
-
-      // UPDATE EXISTING STOCK
 
       if (existingStock) {
         const oldQuantity = Number(existingStock.qty);
@@ -750,10 +820,7 @@ app.post("/newOrder", authenticateUser, async (req, res) => {
         existingStock.price = price;
 
         await existingStock.save();
-      }
-
-      // CREATE CNC HOLDING
-      else if (product === "CNC") {
+      } else if (product === "CNC") {
         const newHolding = new HoldingsModel({
           userId,
           name,
@@ -765,10 +832,7 @@ app.post("/newOrder", authenticateUser, async (req, res) => {
         });
 
         await newHolding.save();
-      }
-
-      // CREATE MIS POSITION
-      else {
+      } else {
         const newPosition = new PositionsModel({
           userId,
           product: "MIS",
@@ -785,16 +849,11 @@ app.post("/newOrder", authenticateUser, async (req, res) => {
       }
     }
 
-    // ==================================================
-    // SELL ORDER
-    // ==================================================
-
     if (mode === "SELL") {
       funds.availableBalance = Number(funds.availableBalance) + orderValue;
 
       await funds.save();
 
-      // Record SELL fund transaction
       await FundTransactionModel.create({
         userId,
         type: "SELL",
@@ -828,11 +887,8 @@ app.post("/newOrder", authenticateUser, async (req, res) => {
 
     return res.status(201).json({
       success: true,
-
       message: `${product} ${mode} order executed successfully`,
-
       order: newOrder,
-
       funds,
     });
   } catch (error) {
@@ -844,10 +900,6 @@ app.post("/newOrder", authenticateUser, async (req, res) => {
     });
   }
 });
-
-// ======================================================
-// CANCEL USER ORDER
-// ======================================================
 
 app.post("/cancelOrder", authenticateUser, async (req, res) => {
   try {
@@ -889,10 +941,6 @@ app.post("/cancelOrder", authenticateUser, async (req, res) => {
     });
   }
 });
-
-// ======================================================
-// DATABASE CONNECTION
-// ======================================================
 
 mongoose
   .connect(uri)

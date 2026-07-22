@@ -2,20 +2,31 @@ const { Schema } = require("mongoose");
 
 const UserSchema = new Schema(
   {
-    firebaseUid: {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    username: {
       type: String,
       required: true,
       unique: true,
+      trim: true,
+      lowercase: true,
     },
 
-    phoneNumber: {
+    email: {
       type: String,
       required: true,
+      unique: true,
+      trim: true,
+      lowercase: true,
     },
 
-    name: {
+    password: {
       type: String,
-      default: "Nivesha User",
+      required: true,
     },
 
     accountType: {
