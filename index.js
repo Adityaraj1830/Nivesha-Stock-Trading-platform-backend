@@ -1,5 +1,6 @@
 require("dotenv").config();
 
+const { sendSupportEmail } = require("./utils/email");
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
@@ -13,6 +14,7 @@ const { OrdersModel } = require("./model/OrdersModel");
 const { UserModel } = require("./model/UserModel");
 const { FundsModel } = require("./model/FundsModel");
 const { FundTransactionModel } = require("./model/FundTransactionModel");
+const { SupportModel } = require("./model/SupportModel");
 
 const PORT = process.env.PORT || 3002;
 const uri = process.env.MONGO_URL;
@@ -942,6 +944,60 @@ app.post("/cancelOrder", authenticateUser, async (req, res) => {
   }
 });
 
+app.post("/support", authenticateUser, async (req, res) => {
+  try {
+    let { subject, message } = req.body;
+
+    subject = subject?.trim();
+    message = message?.trim();
+
+    if (!subject) {
+      return res.status(400).json({
+        success: false,
+        message: "Subject is required",
+      });
+    }
+
+    if (!message) {
+      return res.status(400).json({
+        success: false,
+        message: "Message is required",
+      });
+    }
+
+    const ticketId =
+      "NV-" + Date.now().toString().slice(-6) + Math.floor(Math.random() * 100);
+
+    const supportTicket = await SupportModel.create({
+      userId: req.user._id,
+      name: req.user.name,
+      email: req.user.email,
+      subject,
+      message,
+      ticketId,
+      status: "Pending",
+    });
+
+    try {
+      await sendSupportEmail(supportTicket);
+    } catch (err) {
+      console.error("Email sending failed:", err);
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: "Support ticket created successfully",
+      ticket: supportTicket,
+    });
+  } catch (error) {
+    console.error("SUPPORT ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to submit support request",
+    });
+  }
+});
 mongoose
   .connect(uri)
   .then(() => {
