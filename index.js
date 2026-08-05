@@ -7,6 +7,7 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
+const isProduction = process.env.NODE_ENV === "production";
 
 const { HoldingsModel } = require("./model/HoldingsModel");
 const { PositionsModel } = require("./model/PositionsModel");
@@ -94,13 +95,15 @@ const createSession = (res, user) => {
     },
   );
 
-  res.cookie("nivesha_session", sessionToken, {
-    httpOnly: true,
-    secure: false,
-    sameSite: "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    path: "/",
-  });
+const isProduction = process.env.NODE_ENV === "production";
+
+res.cookie("nivesha_session", sessionToken, {
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: isProduction ? "none" : "lax",
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+  path: "/",
+});
 };
 
 const getPublicUser = (user) => ({
@@ -455,11 +458,11 @@ app.get("/auth/me", authenticateUser, async (req, res) => {
 
 app.post("/auth/logout", (req, res) => {
   res.clearCookie("nivesha_session", {
-    httpOnly: true,
-    secure: false,
-    sameSite: "lax",
-    path: "/",
-  });
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: isProduction ? "none" : "lax",
+  path: "/",
+});
 
   return res.status(200).json({
     success: true,
