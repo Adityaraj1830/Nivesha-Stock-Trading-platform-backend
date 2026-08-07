@@ -95,8 +95,6 @@ const createSession = (res, user) => {
     },
   );
 
-const isProduction = process.env.NODE_ENV === "production";
-
 res.cookie("nivesha_session", sessionToken, {
   httpOnly: true,
   secure: isProduction,
