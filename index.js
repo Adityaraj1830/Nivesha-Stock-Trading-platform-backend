@@ -17,6 +17,8 @@ const { FundsModel } = require("./model/FundsModel");
 const { FundTransactionModel } = require("./model/FundTransactionModel");
 const { SupportModel } = require("./model/SupportModel");
 
+const { getStockQuote, getMultipleStockQuotes } = require("./services/marketService");
+
 const PORT = process.env.PORT || 3002;
 const uri = process.env.MONGO_URL;
 
@@ -241,6 +243,12 @@ const marketData = [
     isDown: false,
   },
 ];
+
+let cachedMarketData = null;
+
+let marketDataCacheTime = 0;
+
+const MARKET_CACHE_DURATION = 60 * 1000;
 
 const updateMarketPrices = () => {
   marketData.forEach((stock) => {
@@ -468,8 +476,99 @@ app.post("/auth/logout", (req, res) => {
   });
 });
 
-app.get("/market-data", (req, res) => {
-  res.json(marketData.map(({ basePrice, ...stock }) => stock));
+app.get("/market-data", async (req, res) => {
+  try {
+
+    const now = Date.now();
+    if (
+      cachedMarketData &&
+      now - marketDataCacheTime < MARKET_CACHE_DURATION
+    ) {
+      return res.json(cachedMarketData);
+    }
+
+    const yahooSymbolMap = {
+      INFY: "INFY.NS",
+      ONGC: "ONGC.NS",
+      TCS: "TCS.NS",
+      KPITTECH: "KPITTECH.NS",
+      QUICKHEAL: "QUICKHEAL.NS",
+      WIPRO: "WIPRO.NS",
+      "M&M": "M&M.NS",
+      RELIANCE: "RELIANCE.NS",
+
+      HUL: "HINDUNILVR.NS",
+      HINDUNILVR: "HINDUNILVR.NS",
+
+      SBIN: "SBIN.NS",
+      ITC: "ITC.NS",
+      BHARTIARTL: "BHARTIARTL.NS",
+      TATAPOWER: "TATAPOWER.NS",
+      HDFCBANK: "HDFCBANK.NS",
+
+      EVEREADY: "EVEREADY.NS",
+      JUBLFOOD: "JUBLFOOD.NS",
+    };
+
+    const yahooSymbols = Object.values(yahooSymbolMap);
+
+    const yahooResults =
+      await getMultipleStockQuotes(yahooSymbols);
+
+    const yahooDataMap = {};
+
+    yahooResults.forEach((result, index) => {
+      if (result.success) {
+        yahooDataMap[yahooSymbols[index]] = result.data;
+      }
+    });
+
+    const updatedMarketData = marketData.map((stock) => {
+      const yahooSymbol = yahooSymbolMap[stock.name];
+
+      const yahooStock = yahooDataMap[yahooSymbol];
+
+      if (!yahooStock) {
+        return stock;
+      }
+
+      const changePercent =
+        yahooStock.changePercent || 0;
+
+      return {
+        ...stock,
+
+        price: yahooStock.price ?? stock.price,
+
+        percent: `${changePercent.toFixed(2)}%`,
+
+        isDown: changePercent < 0,
+      };
+    });
+
+    const responseData = updatedMarketData.map(
+  ({ basePrice, ...stock }) => stock,
+);
+
+cachedMarketData = responseData;
+
+marketDataCacheTime = now;
+
+return res.json(responseData);
+
+  } catch (error) {
+    console.error(
+      "MARKET DATA ROUTE ERROR:",
+      error.message,
+    );
+
+    // Fallback to existing market data
+    res.json(
+      marketData.map(
+        ({ basePrice, ...stock }) => stock,
+      ),
+    );
+  }
 });
 
 app.get("/funds", authenticateUser, async (req, res) => {
@@ -1016,6 +1115,28 @@ app.post("/support", authenticateUser, async (req, res) => {
     });
   }
 });
+
+app.get("/market/quote/:symbol", async (req, res) => {
+  try {
+    const { symbol } = req.params;
+
+    const result = await getStockQuote(symbol);
+
+    if (!result.success) {
+      return res.status(500).json(result);
+    }
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("MARKET QUOTE ROUTE ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to fetch market quote",
+    });
+  }
+});
+
 mongoose
   .connect(uri)
   .then(() => {
