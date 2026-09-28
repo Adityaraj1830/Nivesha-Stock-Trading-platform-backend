@@ -72,8 +72,43 @@ const getMultipleStockQuotes = async (symbols) => {
   }
 };
 
+// Fetch historical stock price data
+const getStockHistory = async (symbol) => {
+  try {
+    const result = await yahooFinance.historical(symbol, {
+      period1: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      period2: new Date(),
+      interval: "1d",
+    });
+
+    const history = result.map((item) => ({
+      date: item.date,
+      open: item.open,
+      high: item.high,
+      low: item.low,
+      close: item.close,
+      volume: item.volume,
+    }));
+
+    return {
+      success: true,
+      data: history,
+    };
+  } catch (error) {
+    console.error(
+      `HISTORICAL MARKET DATA ERROR for ${symbol}:`,
+      error.message,
+    );
+
+    return {
+      success: false,
+      message: "Unable to fetch historical market data",
+    };
+  }
+};
 
 module.exports = {
   getStockQuote,
   getMultipleStockQuotes,
+  getStockHistory,
 };

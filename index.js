@@ -17,7 +17,7 @@ const { FundsModel } = require("./model/FundsModel");
 const { FundTransactionModel } = require("./model/FundTransactionModel");
 const { SupportModel } = require("./model/SupportModel");
 
-const { getStockQuote, getMultipleStockQuotes } = require("./services/marketService");
+const { getStockQuote, getMultipleStockQuotes, getStockHistory } = require("./services/marketService");
 
 const PORT = process.env.PORT || 3002;
 const uri = process.env.MONGO_URL;
@@ -1133,6 +1133,50 @@ app.get("/market/quote/:symbol", async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Unable to fetch market quote",
+    });
+  }
+});
+
+app.get("/market/history/:symbol", async (req, res) => {
+  try {
+    const { symbol } = req.params;
+
+    const yahooSymbolMap = {
+      INFY: "INFY.NS",
+      ONGC: "ONGC.NS",
+      TCS: "TCS.NS",
+      KPITTECH: "KPITTECH.NS",
+      QUICKHEAL: "QUICKHEAL.NS",
+      WIPRO: "WIPRO.NS",
+      "M&M": "M&M.NS",
+      RELIANCE: "RELIANCE.NS",
+      HUL: "HINDUNILVR.NS",
+      HINDUNILVR: "HINDUNILVR.NS",
+      SBIN: "SBIN.NS",
+      ITC: "ITC.NS",
+      BHARTIARTL: "BHARTIARTL.NS",
+      TATAPOWER: "TATAPOWER.NS",
+      HDFCBANK: "HDFCBANK.NS",
+      EVEREADY: "EVEREADY.NS",
+      JUBLFOOD: "JUBLFOOD.NS",
+    };
+
+    const yahooSymbol =
+      yahooSymbolMap[symbol] || `${symbol}.NS`;
+
+    const result = await getStockHistory(yahooSymbol);
+
+    if (!result.success) {
+      return res.status(500).json(result);
+    }
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("MARKET HISTORY ROUTE ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to fetch historical market data",
     });
   }
 });
