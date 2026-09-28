@@ -17,7 +17,11 @@ const { FundsModel } = require("./model/FundsModel");
 const { FundTransactionModel } = require("./model/FundTransactionModel");
 const { SupportModel } = require("./model/SupportModel");
 
-const { getStockQuote, getMultipleStockQuotes, getStockHistory } = require("./services/marketService");
+const {
+  getStockQuote,
+  getMultipleStockQuotes,
+  getStockHistory,
+} = require("./services/marketService");
 
 const PORT = process.env.PORT || 3002;
 const uri = process.env.MONGO_URL;
@@ -97,13 +101,13 @@ const createSession = (res, user) => {
     },
   );
 
-res.cookie("nivesha_session", sessionToken, {
-  httpOnly: true,
-  secure: isProduction,
-  sameSite: isProduction ? "none" : "lax",
-  maxAge: 7 * 24 * 60 * 60 * 1000,
-  path: "/",
-});
+  res.cookie("nivesha_session", sessionToken, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: "/",
+  });
 };
 
 const getPublicUser = (user) => ({
@@ -115,178 +119,129 @@ const getPublicUser = (user) => ({
   tradingStatus: user.tradingStatus,
 });
 
+/*
+|--------------------------------------------------------------------------
+| LIVE MARKET DATA CONFIGURATION
+|--------------------------------------------------------------------------
+*/
+
 const marketData = [
-  {
-    name: "INFY",
-    price: 1555.45,
-    basePrice: 1555.45,
-    percent: "0.00%",
-    isDown: false,
-  },
-  {
-    name: "ONGC",
-    price: 116.8,
-    basePrice: 116.8,
-    percent: "0.00%",
-    isDown: false,
-  },
-  {
-    name: "TCS",
-    price: 3194.8,
-    basePrice: 3194.8,
-    percent: "0.00%",
-    isDown: false,
-  },
-  {
-    name: "KPITTECH",
-    price: 266.45,
-    basePrice: 266.45,
-    percent: "0.00%",
-    isDown: false,
-  },
-  {
-    name: "QUICKHEAL",
-    price: 308.55,
-    basePrice: 308.55,
-    percent: "0.00%",
-    isDown: false,
-  },
-  {
-    name: "WIPRO",
-    price: 577.75,
-    basePrice: 577.75,
-    percent: "0.00%",
-    isDown: false,
-  },
-  {
-    name: "M&M",
-    price: 779.8,
-    basePrice: 779.8,
-    percent: "0.00%",
-    isDown: false,
-  },
-  {
-    name: "RELIANCE",
-    price: 2112.4,
-    basePrice: 2112.4,
-    percent: "0.00%",
-    isDown: false,
-  },
-  {
-    name: "HUL",
-    price: 512.4,
-    basePrice: 512.4,
-    percent: "0.00%",
-    isDown: false,
-  },
-  {
-    name: "HINDUNILVR",
-    price: 2417.4,
-    basePrice: 2417.4,
-    percent: "0.00%",
-    isDown: false,
-  },
-  {
-    name: "SBIN",
-    price: 430.2,
-    basePrice: 430.2,
-    percent: "0.00%",
-    isDown: false,
-  },
-  {
-    name: "ITC",
-    price: 207.9,
-    basePrice: 207.9,
-    percent: "0.00%",
-    isDown: false,
-  },
-  {
-    name: "BHARTIARTL",
-    price: 541.15,
-    basePrice: 541.15,
-    percent: "0.00%",
-    isDown: false,
-  },
-  {
-    name: "TATAPOWER",
-    price: 124.15,
-    basePrice: 124.15,
-    percent: "0.00%",
-    isDown: false,
-  },
-  {
-    name: "HDFCBANK",
-    price: 1522.35,
-    basePrice: 1522.35,
-    percent: "0.00%",
-    isDown: false,
-  },
-  {
-    name: "SGBMAY29",
-    price: 4719,
-    basePrice: 4719,
-    percent: "0.00%",
-    isDown: false,
-  },
-  {
-    name: "EVEREADY",
-    price: 312.35,
-    basePrice: 312.35,
-    percent: "0.00%",
-    isDown: false,
-  },
-  {
-    name: "JUBLFOOD",
-    price: 3082.65,
-    basePrice: 3082.65,
-    percent: "0.00%",
-    isDown: false,
-  },
+  "INFY",
+  "ONGC",
+  "TCS",
+  "KPITTECH",
+  "QUICKHEAL",
+  "WIPRO",
+  "M&M",
+  "RELIANCE",
+  "HUL",
+  "HINDUNILVR",
+  "SBIN",
+  "ITC",
+  "BHARTIARTL",
+  "TATAPOWER",
+  "HDFCBANK",
+  "EVEREADY",
+  "JUBLFOOD",
 ];
 
-let cachedMarketData = null;
+const yahooSymbolMap = {
+  INFY: "INFY.NS",
+  ONGC: "ONGC.NS",
+  TCS: "TCS.NS",
+  KPITTECH: "KPITTECH.NS",
+  QUICKHEAL: "QUICKHEAL.NS",
+  WIPRO: "WIPRO.NS",
+  "M&M": "M&M.NS",
+  RELIANCE: "RELIANCE.NS",
+  HUL: "HINDUNILVR.NS",
+  HINDUNILVR: "HINDUNILVR.NS",
+  SBIN: "SBIN.NS",
+  ITC: "ITC.NS",
+  BHARTIARTL: "BHARTIARTL.NS",
+  TATAPOWER: "TATAPOWER.NS",
+  HDFCBANK: "HDFCBANK.NS",
+  EVEREADY: "EVEREADY.NS",
+  JUBLFOOD: "JUBLFOOD.NS",
+};
 
+/*
+ * Stores the most recent successfully fetched LIVE market value.
+ *
+ * Important:
+ * We do NOT fall back to the old hard-coded prices anymore.
+ *
+ * If Yahoo Finance temporarily fails, we use the last successful
+ * LIVE value instead.
+ */
+const lastSuccessfulMarketData = new Map();
+
+let cachedMarketData = null;
 let marketDataCacheTime = 0;
 
 const MARKET_CACHE_DURATION = 60 * 1000;
 
-const updateMarketPrices = () => {
-  marketData.forEach((stock) => {
-    const maximumMovement = stock.basePrice * 0.002;
+/*
+|--------------------------------------------------------------------------
+| GET LATEST MARKET STOCK
+|--------------------------------------------------------------------------
+*/
 
-    const priceMovement = (Math.random() * 2 - 1) * maximumMovement;
+const getLatestMarketStock = async (name) => {
+  const yahooSymbol = yahooSymbolMap[name];
 
-    let updatedPrice = stock.price + priceMovement;
+  if (!yahooSymbol) {
+    return null;
+  }
 
-    const maximumPrice = stock.basePrice * 1.08;
-    const minimumPrice = stock.basePrice * 0.92;
+  try {
+    const result = await getStockQuote(yahooSymbol);
 
-    if (updatedPrice > maximumPrice) {
-      updatedPrice = maximumPrice;
+    if (
+      result.success &&
+      result.data &&
+      Number.isFinite(Number(result.data.price))
+    ) {
+      const changePercent = Number(result.data.changePercent) || 0;
+
+      const stock = {
+        name,
+        price: Number(Number(result.data.price).toFixed(2)),
+        percent: `${changePercent >= 0 ? "+" : ""}${changePercent.toFixed(
+          2,
+        )}%`,
+        isDown: changePercent < 0,
+      };
+
+      lastSuccessfulMarketData.set(name, stock);
+
+      return stock;
     }
+  } catch (error) {
+    console.error(
+      `LATEST MARKET PRICE ERROR for ${name}:`,
+      error.message,
+    );
+  }
 
-    if (updatedPrice < minimumPrice) {
-      updatedPrice = minimumPrice;
-    }
-
-    stock.price = Number(updatedPrice.toFixed(2));
-
-    const percentageChange =
-      ((stock.price - stock.basePrice) / stock.basePrice) * 100;
-
-    stock.percent = `${percentageChange >= 0 ? "+" : ""}${percentageChange.toFixed(
-      2,
-    )}%`;
-
-    stock.isDown = percentageChange < 0;
-  });
+  /*
+   * Yahoo temporarily failed.
+   *
+   * Return the last successful LIVE value instead of the old
+   * hard-coded/demo price.
+   */
+  return lastSuccessfulMarketData.get(name) || null;
 };
-
-setInterval(updateMarketPrices, 10000);
 
 app.get("/", (req, res) => {
   res.send("Backend is running 🚀");
 });
+
+/*
+|--------------------------------------------------------------------------
+| AUTH - SIGNUP
+|--------------------------------------------------------------------------
+*/
 
 app.post("/auth/signup", async (req, res) => {
   try {
@@ -315,7 +270,8 @@ app.post("/auth/signup", async (req, res) => {
     if (!usernamePattern.test(username)) {
       return res.status(400).json({
         success: false,
-        message: "User ID can only contain letters, numbers and underscores",
+        message:
+          "User ID can only contain letters, numbers and underscores",
       });
     }
 
@@ -395,6 +351,12 @@ app.post("/auth/signup", async (req, res) => {
   }
 });
 
+/*
+|--------------------------------------------------------------------------
+| AUTH - LOGIN
+|--------------------------------------------------------------------------
+*/
+
 app.post("/auth/login", async (req, res) => {
   try {
     const email = req.body.email?.trim().toLowerCase();
@@ -416,7 +378,10 @@ app.post("/auth/login", async (req, res) => {
       });
     }
 
-    const isPasswordCorrect = await bcrypt.compare(password, user.password);
+    const isPasswordCorrect = await bcrypt.compare(
+      password,
+      user.password,
+    );
 
     if (!isPasswordCorrect) {
       return res.status(401).json({
@@ -455,6 +420,12 @@ app.post("/auth/login", async (req, res) => {
   }
 });
 
+/*
+|--------------------------------------------------------------------------
+| AUTH - CURRENT USER
+|--------------------------------------------------------------------------
+*/
+
 app.get("/auth/me", authenticateUser, async (req, res) => {
   return res.status(200).json({
     success: true,
@@ -462,13 +433,19 @@ app.get("/auth/me", authenticateUser, async (req, res) => {
   });
 });
 
+/*
+|--------------------------------------------------------------------------
+| AUTH - LOGOUT
+|--------------------------------------------------------------------------
+*/
+
 app.post("/auth/logout", (req, res) => {
   res.clearCookie("nivesha_session", {
-  httpOnly: true,
-  secure: isProduction,
-  sameSite: isProduction ? "none" : "lax",
-  path: "/",
-});
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
+    path: "/",
+  });
 
   return res.status(200).json({
     success: true,
@@ -476,10 +453,19 @@ app.post("/auth/logout", (req, res) => {
   });
 });
 
+/*
+|--------------------------------------------------------------------------
+| LIVE MARKET DATA
+|--------------------------------------------------------------------------
+*/
+
 app.get("/market-data", async (req, res) => {
   try {
-
     const now = Date.now();
+
+    /*
+     * Return cached LIVE data for 60 seconds.
+     */
     if (
       cachedMarketData &&
       now - marketDataCacheTime < MARKET_CACHE_DURATION
@@ -487,30 +473,9 @@ app.get("/market-data", async (req, res) => {
       return res.json(cachedMarketData);
     }
 
-    const yahooSymbolMap = {
-      INFY: "INFY.NS",
-      ONGC: "ONGC.NS",
-      TCS: "TCS.NS",
-      KPITTECH: "KPITTECH.NS",
-      QUICKHEAL: "QUICKHEAL.NS",
-      WIPRO: "WIPRO.NS",
-      "M&M": "M&M.NS",
-      RELIANCE: "RELIANCE.NS",
-
-      HUL: "HINDUNILVR.NS",
-      HINDUNILVR: "HINDUNILVR.NS",
-
-      SBIN: "SBIN.NS",
-      ITC: "ITC.NS",
-      BHARTIARTL: "BHARTIARTL.NS",
-      TATAPOWER: "TATAPOWER.NS",
-      HDFCBANK: "HDFCBANK.NS",
-
-      EVEREADY: "EVEREADY.NS",
-      JUBLFOOD: "JUBLFOOD.NS",
-    };
-
-    const yahooSymbols = Object.values(yahooSymbolMap);
+    const yahooSymbols = marketData
+      .map((name) => yahooSymbolMap[name])
+      .filter(Boolean);
 
     const yahooResults =
       await getMultipleStockQuotes(yahooSymbols);
@@ -518,58 +483,117 @@ app.get("/market-data", async (req, res) => {
     const yahooDataMap = {};
 
     yahooResults.forEach((result, index) => {
-      if (result.success) {
+      if (
+        result.success &&
+        result.data &&
+        Number.isFinite(Number(result.data.price))
+      ) {
         yahooDataMap[yahooSymbols[index]] = result.data;
       }
     });
 
-    const updatedMarketData = marketData.map((stock) => {
-      const yahooSymbol = yahooSymbolMap[stock.name];
+    /*
+     * Build the response only from:
+     *
+     * 1. Fresh Yahoo Finance data
+     * OR
+     * 2. Previously successful LIVE data
+     *
+     * Never use the old hard-coded prices.
+     */
+    const updatedMarketData = marketData
+      .map((name) => {
+        const yahooSymbol = yahooSymbolMap[name];
+        const yahooStock = yahooDataMap[yahooSymbol];
 
-      const yahooStock = yahooDataMap[yahooSymbol];
+        if (yahooStock) {
+          const changePercent =
+            Number(yahooStock.changePercent) || 0;
 
-      if (!yahooStock) {
-        return stock;
+          const stock = {
+            name,
+            price: Number(
+              Number(yahooStock.price).toFixed(2),
+            ),
+            percent: `${
+              changePercent >= 0 ? "+" : ""
+            }${changePercent.toFixed(2)}%`,
+            isDown: changePercent < 0,
+          };
+
+          /*
+           * Save this successful LIVE value.
+           */
+          lastSuccessfulMarketData.set(name, stock);
+
+          return stock;
+        }
+
+        /*
+         * Yahoo failed for this particular stock.
+         *
+         * Use the previous successful LIVE value.
+         * Do NOT use the old static price.
+         */
+        return (
+          lastSuccessfulMarketData.get(name) || null
+        );
+      })
+      .filter(Boolean);
+
+    /*
+     * If we have no market data at all, don't pretend that
+     * hard-coded prices are live.
+     */
+    if (updatedMarketData.length === 0) {
+      if (cachedMarketData) {
+        return res.json(cachedMarketData);
       }
 
-      const changePercent =
-        yahooStock.changePercent || 0;
+      return res.status(503).json({
+        success: false,
+        message:
+          "Live market data is temporarily unavailable",
+      });
+    }
 
-      return {
-        ...stock,
+    /*
+     * Save the latest successful/last-known-live response
+     * for the next 60 seconds.
+     */
+    cachedMarketData = updatedMarketData;
+    marketDataCacheTime = now;
 
-        price: yahooStock.price ?? stock.price,
-
-        percent: `${changePercent.toFixed(2)}%`,
-
-        isDown: changePercent < 0,
-      };
-    });
-
-    const responseData = updatedMarketData.map(
-  ({ basePrice, ...stock }) => stock,
-);
-
-cachedMarketData = responseData;
-
-marketDataCacheTime = now;
-
-return res.json(responseData);
-
+    return res.json(updatedMarketData);
   } catch (error) {
     console.error(
       "MARKET DATA ROUTE ERROR:",
       error.message,
     );
 
-    // Fallback to existing market data
-    res.json(
-      marketData.map(
-        ({ basePrice, ...stock }) => stock,
-      ),
-    );
+    /*
+     * If the entire request fails, return the last successful
+     * LIVE response if one exists.
+     *
+     * Never return old fake/static prices.
+     */
+    if (cachedMarketData) {
+      return res.json(cachedMarketData);
+    }
+
+    return res.status(503).json({
+      success: false,
+      message:
+        "Live market data is temporarily unavailable",
+    });
   }
 });
+
+/*
+|--------------------------------------------------------------------------
+| FUNDS
+|--------------------------------------------------------------------------
+*/
 
 app.get("/funds", authenticateUser, async (req, res) => {
   try {
@@ -625,8 +649,11 @@ app.post("/addFunds", authenticateUser, async (req, res) => {
       });
     }
 
-    funds.availableBalance = Number(funds.availableBalance) + amount;
-    funds.totalDeposited = Number(funds.totalDeposited) + amount;
+    funds.availableBalance =
+      Number(funds.availableBalance) + amount;
+
+    funds.totalDeposited =
+      Number(funds.totalDeposited) + amount;
 
     await funds.save();
 
@@ -653,533 +680,725 @@ app.post("/addFunds", authenticateUser, async (req, res) => {
   }
 });
 
-app.post("/withdrawFunds", authenticateUser, async (req, res) => {
-  try {
-    const amount = Number(req.body.amount);
+app.post(
+  "/withdrawFunds",
+  authenticateUser,
+  async (req, res) => {
+    try {
+      const amount = Number(req.body.amount);
 
-    const userId = req.user._id;
+      const userId = req.user._id;
 
-    if (!Number.isFinite(amount) || amount <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Enter a valid withdrawal amount",
-      });
-    }
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Enter a valid withdrawal amount",
+        });
+      }
 
-    const funds = await FundsModel.findOne({
-      userId,
-    });
-
-    if (!funds) {
-      return res.status(404).json({
-        success: false,
-        message: "Funds account not found",
-      });
-    }
-
-    if (amount > Number(funds.availableBalance)) {
-      return res.status(400).json({
-        success: false,
-        message: "Insufficient available balance",
-      });
-    }
-
-    funds.availableBalance = Number(funds.availableBalance) - amount;
-    funds.totalWithdrawn = Number(funds.totalWithdrawn) + amount;
-
-    await funds.save();
-
-    await FundTransactionModel.create({
-      userId,
-      type: "WITHDRAWAL",
-      amount,
-      description: "Funds withdrawn from trading account",
-      balanceAfter: funds.availableBalance,
-    });
-
-    return res.json({
-      success: true,
-      message: "Funds withdrawn successfully",
-      funds,
-    });
-  } catch (error) {
-    console.error("WITHDRAW FUNDS ERROR:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Unable to withdraw funds",
-    });
-  }
-});
-
-app.get("/fund-transactions", authenticateUser, async (req, res) => {
-  try {
-    const transactions = await FundTransactionModel.find({
-      userId: req.user._id,
-    }).sort({
-      createdAt: -1,
-    });
-
-    return res.json(transactions);
-  } catch (error) {
-    console.error("FUND TRANSACTION FETCH ERROR:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Unable to fetch fund transactions",
-    });
-  }
-});
-
-app.get("/allHoldings", authenticateUser, async (req, res) => {
-  try {
-    const allHoldings = await HoldingsModel.find({
-      userId: req.user._id,
-    });
-
-    return res.json(allHoldings);
-  } catch (error) {
-    console.error("HOLDINGS FETCH ERROR:", error);
-
-    return res.status(500).json({
-      message: "Unable to fetch holdings",
-    });
-  }
-});
-
-app.get("/allPositions", authenticateUser, async (req, res) => {
-  try {
-    const allPositions = await PositionsModel.find({
-      userId: req.user._id,
-    });
-
-    return res.json(allPositions);
-  } catch (error) {
-    console.error("POSITIONS FETCH ERROR:", error);
-
-    return res.status(500).json({
-      message: "Unable to fetch positions",
-    });
-  }
-});
-
-app.get("/allOrders", authenticateUser, async (req, res) => {
-  try {
-    const orders = await OrdersModel.find({
-      userId: req.user._id,
-    }).sort({
-      createdAt: -1,
-    });
-
-    return res.json(orders);
-  } catch (error) {
-    console.error("ORDERS FETCH ERROR:", error);
-
-    return res.status(500).json({
-      message: "Unable to fetch orders",
-    });
-  }
-});
-
-app.post("/newOrder", authenticateUser, async (req, res) => {
-  try {
-    let { name, qty, mode, product = "CNC" } = req.body;
-
-    name = name?.trim().toUpperCase();
-    qty = Number(qty);
-    mode = mode?.trim().toUpperCase();
-    product = product?.trim().toUpperCase();
-
-    if (!name) {
-      return res.status(400).json({
-        success: false,
-        message: "Stock name is required",
-      });
-    }
-
-    if (!Number.isInteger(qty) || qty <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Quantity must be a positive whole number",
-      });
-    }
-
-    if (!["BUY", "SELL"].includes(mode)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid order type",
-      });
-    }
-
-    if (!["CNC", "MIS"].includes(product)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid product type",
-      });
-    }
-
-    const marketStock = marketData.find((stock) => stock.name === name);
-
-    if (!marketStock) {
-      return res.status(400).json({
-        success: false,
-        message: "Stock is not available for trading",
-      });
-    }
-
-    const price = Number(marketStock.price);
-
-    const userId = req.user._id;
-
-    const orderValue = qty * price;
-
-    let funds = await FundsModel.findOne({
-      userId,
-    });
-
-    if (!funds) {
-      funds = new FundsModel({
+      const funds = await FundsModel.findOne({
         userId,
-        availableBalance: 100000,
-        totalDeposited: 100000,
-        totalWithdrawn: 0,
       });
 
-      await funds.save();
-    }
+      if (!funds) {
+        return res.status(404).json({
+          success: false,
+          message: "Funds account not found",
+        });
+      }
 
-    let existingStock;
-
-    if (product === "CNC") {
-      existingStock = await HoldingsModel.findOne({
-        userId,
-        name,
-      });
-    } else {
-      existingStock = await PositionsModel.findOne({
-        userId,
-        name,
-        product: "MIS",
-      });
-    }
-
-    if (mode === "BUY") {
-      if (orderValue > Number(funds.availableBalance)) {
+      if (amount > Number(funds.availableBalance)) {
         return res.status(400).json({
           success: false,
           message: "Insufficient available balance",
         });
       }
-    }
 
-    if (mode === "SELL") {
-      if (!existingStock) {
-        return res.status(400).json({
-          success: false,
-          message: `You do not own any ${product} shares of ${name}`,
-        });
-      }
+      funds.availableBalance =
+        Number(funds.availableBalance) - amount;
 
-      if (qty > Number(existingStock.qty)) {
-        return res.status(400).json({
-          success: false,
-          message: `You only own ${existingStock.qty} shares of ${name}`,
-        });
-      }
-    }
-
-    let realizedPnL = 0;
-
-    if (mode === "SELL") {
-      realizedPnL = (price - Number(existingStock.avg)) * qty;
-    }
-
-    const newOrder = new OrdersModel({
-      userId,
-      name,
-      qty,
-      price,
-      mode,
-      product,
-      status: "COMPLETED",
-      realizedPnL,
-      time: new Date().toLocaleTimeString(),
-    });
-
-    await newOrder.save();
-
-    if (mode === "BUY") {
-      funds.availableBalance = Number(funds.availableBalance) - orderValue;
+      funds.totalWithdrawn =
+        Number(funds.totalWithdrawn) + amount;
 
       await funds.save();
 
       await FundTransactionModel.create({
         userId,
-        type: "BUY",
-        amount: orderValue,
-        stockName: name,
-        quantity: qty,
-        description: `${product} BUY - ${qty} shares of ${name}`,
+        type: "WITHDRAWAL",
+        amount,
+        description:
+          "Funds withdrawn from trading account",
         balanceAfter: funds.availableBalance,
       });
 
-      if (existingStock) {
-        const oldQuantity = Number(existingStock.qty);
+      return res.json({
+        success: true,
+        message: "Funds withdrawn successfully",
+        funds,
+      });
+    } catch (error) {
+      console.error(
+        "WITHDRAW FUNDS ERROR:",
+        error,
+      );
 
-        const oldAverage = Number(existingStock.avg);
-
-        const totalQuantity = oldQuantity + qty;
-
-        const totalCost = oldAverage * oldQuantity + price * qty;
-
-        existingStock.qty = totalQuantity;
-
-        existingStock.avg = totalCost / totalQuantity;
-
-        existingStock.price = price;
-
-        await existingStock.save();
-      } else if (product === "CNC") {
-        const newHolding = new HoldingsModel({
-          userId,
-          name,
-          qty,
-          avg: price,
-          price,
-          net: "0%",
-          day: "0%",
-        });
-
-        await newHolding.save();
-      } else {
-        const newPosition = new PositionsModel({
-          userId,
-          product: "MIS",
-          name,
-          qty,
-          avg: price,
-          price,
-          net: "0%",
-          day: "0%",
-          isLoss: false,
-        });
-
-        await newPosition.save();
-      }
+      return res.status(500).json({
+        success: false,
+        message: "Unable to withdraw funds",
+      });
     }
+  },
+);
 
-    if (mode === "SELL") {
-      funds.availableBalance = Number(funds.availableBalance) + orderValue;
+app.get(
+  "/fund-transactions",
+  authenticateUser,
+  async (req, res) => {
+    try {
+      const transactions =
+        await FundTransactionModel.find({
+          userId: req.user._id,
+        }).sort({
+          createdAt: -1,
+        });
 
-      await funds.save();
+      return res.json(transactions);
+    } catch (error) {
+      console.error(
+        "FUND TRANSACTION FETCH ERROR:",
+        error,
+      );
 
-      await FundTransactionModel.create({
+      return res.status(500).json({
+        success: false,
+        message: "Unable to fetch fund transactions",
+      });
+    }
+  },
+);
+
+/*
+|--------------------------------------------------------------------------
+| HOLDINGS
+|--------------------------------------------------------------------------
+*/
+
+app.get(
+  "/allHoldings",
+  authenticateUser,
+  async (req, res) => {
+    try {
+      const allHoldings =
+        await HoldingsModel.find({
+          userId: req.user._id,
+        });
+
+      return res.json(allHoldings);
+    } catch (error) {
+      console.error(
+        "HOLDINGS FETCH ERROR:",
+        error,
+      );
+
+      return res.status(500).json({
+        message: "Unable to fetch holdings",
+      });
+    }
+  },
+);
+
+/*
+|--------------------------------------------------------------------------
+| POSITIONS
+|--------------------------------------------------------------------------
+*/
+
+app.get(
+  "/allPositions",
+  authenticateUser,
+  async (req, res) => {
+    try {
+      const allPositions =
+        await PositionsModel.find({
+          userId: req.user._id,
+        });
+
+      return res.json(allPositions);
+    } catch (error) {
+      console.error(
+        "POSITIONS FETCH ERROR:",
+        error,
+      );
+
+      return res.status(500).json({
+        message: "Unable to fetch positions",
+      });
+    }
+  },
+);
+
+/*
+|--------------------------------------------------------------------------
+| ORDERS
+|--------------------------------------------------------------------------
+*/
+
+app.get(
+  "/allOrders",
+  authenticateUser,
+  async (req, res) => {
+    try {
+      const orders =
+        await OrdersModel.find({
+          userId: req.user._id,
+        }).sort({
+          createdAt: -1,
+        });
+
+      return res.json(orders);
+    } catch (error) {
+      console.error(
+        "ORDERS FETCH ERROR:",
+        error,
+      );
+
+      return res.status(500).json({
+        message: "Unable to fetch orders",
+      });
+    }
+  },
+);
+
+/*
+|--------------------------------------------------------------------------
+| CREATE BUY / SELL ORDER
+|--------------------------------------------------------------------------
+*/
+
+app.post(
+  "/newOrder",
+  authenticateUser,
+  async (req, res) => {
+    try {
+      let {
+        name,
+        qty,
+        mode,
+        product = "CNC",
+      } = req.body;
+
+      name = name?.trim().toUpperCase();
+      qty = Number(qty);
+      mode = mode?.trim().toUpperCase();
+      product = product?.trim().toUpperCase();
+
+      if (!name) {
+        return res.status(400).json({
+          success: false,
+          message: "Stock name is required",
+        });
+      }
+
+      if (!Number.isInteger(qty) || qty <= 0) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Quantity must be a positive whole number",
+        });
+      }
+
+      if (!["BUY", "SELL"].includes(mode)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid order type",
+        });
+      }
+
+      if (!["CNC", "MIS"].includes(product)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid product type",
+        });
+      }
+
+      /*
+       * IMPORTANT:
+       *
+       * Previously the order used:
+       *
+       * marketData.find(...)
+       *
+       * which could return the old hard-coded price.
+       *
+       * Now we fetch the latest available LIVE price.
+       */
+      const marketStock =
+        await getLatestMarketStock(name);
+
+      if (!marketStock) {
+        return res.status(503).json({
+          success: false,
+          message:
+            "Live market price is temporarily unavailable. Please try again.",
+        });
+      }
+
+      const price = Number(marketStock.price);
+
+      const userId = req.user._id;
+
+      const orderValue = qty * price;
+
+      let funds = await FundsModel.findOne({
         userId,
-        type: "SELL",
-        amount: orderValue,
-        stockName: name,
-        quantity: qty,
-        description: `${product} SELL - ${qty} shares of ${name}`,
-        balanceAfter: funds.availableBalance,
       });
 
-      const remainingQuantity = Number(existingStock.qty) - qty;
+      if (!funds) {
+        funds = new FundsModel({
+          userId,
+          availableBalance: 100000,
+          totalDeposited: 100000,
+          totalWithdrawn: 0,
+        });
 
-      if (remainingQuantity === 0) {
-        if (product === "CNC") {
-          await HoldingsModel.deleteOne({
-            _id: existingStock._id,
+        await funds.save();
+      }
+
+      let existingStock;
+
+      if (product === "CNC") {
+        existingStock =
+          await HoldingsModel.findOne({
             userId,
+            name,
           });
-        } else {
-          await PositionsModel.deleteOne({
-            _id: existingStock._id,
+      } else {
+        existingStock =
+          await PositionsModel.findOne({
             userId,
+            name,
+            product: "MIS",
+          });
+      }
+
+      if (mode === "BUY") {
+        if (
+          orderValue >
+          Number(funds.availableBalance)
+        ) {
+          return res.status(400).json({
+            success: false,
+            message: "Insufficient available balance",
           });
         }
-      } else {
-        existingStock.qty = remainingQuantity;
-
-        await existingStock.save();
       }
-    }
 
-    return res.status(201).json({
-      success: true,
-      message: `${product} ${mode} order executed successfully`,
-      order: newOrder,
-      funds,
-    });
-  } catch (error) {
-    console.error("ORDER ERROR:", error);
+      if (mode === "SELL") {
+        if (!existingStock) {
+          return res.status(400).json({
+            success: false,
+            message: `You do not own any ${product} shares of ${name}`,
+          });
+        }
 
-    return res.status(500).json({
-      success: false,
-      message: "Unable to process order",
-    });
-  }
-});
+        if (qty > Number(existingStock.qty)) {
+          return res.status(400).json({
+            success: false,
+            message: `You only own ${existingStock.qty} shares of ${name}`,
+          });
+        }
+      }
 
-app.post("/cancelOrder", authenticateUser, async (req, res) => {
-  try {
-    const { id } = req.body;
+      let realizedPnL = 0;
 
-    const order = await OrdersModel.findOne({
-      _id: id,
-      userId: req.user._id,
-    });
+      if (mode === "SELL") {
+        realizedPnL =
+          (price - Number(existingStock.avg)) *
+          qty;
+      }
 
-    if (!order) {
-      return res.status(404).json({
+      const newOrder = new OrdersModel({
+        userId,
+        name,
+        qty,
+        price,
+        mode,
+        product,
+        status: "COMPLETED",
+        realizedPnL,
+        time: new Date().toLocaleTimeString(),
+      });
+
+      await newOrder.save();
+
+      if (mode === "BUY") {
+        funds.availableBalance =
+          Number(funds.availableBalance) -
+          orderValue;
+
+        await funds.save();
+
+        await FundTransactionModel.create({
+          userId,
+          type: "BUY",
+          amount: orderValue,
+          stockName: name,
+          quantity: qty,
+          description: `${product} BUY - ${qty} shares of ${name}`,
+          balanceAfter:
+            funds.availableBalance,
+        });
+
+        if (existingStock) {
+          const oldQuantity =
+            Number(existingStock.qty);
+
+          const oldAverage =
+            Number(existingStock.avg);
+
+          const totalQuantity =
+            oldQuantity + qty;
+
+          const totalCost =
+            oldAverage * oldQuantity +
+            price * qty;
+
+          existingStock.qty =
+            totalQuantity;
+
+          existingStock.avg =
+            totalCost / totalQuantity;
+
+          existingStock.price =
+            price;
+
+          await existingStock.save();
+        } else if (product === "CNC") {
+          const newHolding =
+            new HoldingsModel({
+              userId,
+              name,
+              qty,
+              avg: price,
+              price,
+              net: "0%",
+              day: "0%",
+            });
+
+          await newHolding.save();
+        } else {
+          const newPosition =
+            new PositionsModel({
+              userId,
+              product: "MIS",
+              name,
+              qty,
+              avg: price,
+              price,
+              net: "0%",
+              day: "0%",
+              isLoss: false,
+            });
+
+          await newPosition.save();
+        }
+      }
+
+      if (mode === "SELL") {
+        funds.availableBalance =
+          Number(funds.availableBalance) +
+          orderValue;
+
+        await funds.save();
+
+        await FundTransactionModel.create({
+          userId,
+          type: "SELL",
+          amount: orderValue,
+          stockName: name,
+          quantity: qty,
+          description: `${product} SELL - ${qty} shares of ${name}`,
+          balanceAfter:
+            funds.availableBalance,
+        });
+
+        const remainingQuantity =
+          Number(existingStock.qty) - qty;
+
+        if (remainingQuantity === 0) {
+          if (product === "CNC") {
+            await HoldingsModel.deleteOne({
+              _id: existingStock._id,
+              userId,
+            });
+          } else {
+            await PositionsModel.deleteOne({
+              _id: existingStock._id,
+              userId,
+            });
+          }
+        } else {
+          existingStock.qty =
+            remainingQuantity;
+
+          await existingStock.save();
+        }
+      }
+
+      return res.status(201).json({
+        success: true,
+        message: `${product} ${mode} order executed successfully`,
+        order: newOrder,
+        funds,
+      });
+    } catch (error) {
+      console.error(
+        "ORDER ERROR:",
+        error,
+      );
+
+      return res.status(500).json({
         success: false,
-        message: "Order not found",
+        message: "Unable to process order",
       });
     }
+  },
+);
 
-    if (order.status === "COMPLETED") {
-      return res.status(400).json({
-        success: false,
-        message: "Completed orders cannot be cancelled",
-      });
-    }
+/*
+|--------------------------------------------------------------------------
+| CANCEL ORDER
+|--------------------------------------------------------------------------
+*/
 
-    order.status = "CANCELLED";
-
-    await order.save();
-
-    return res.json({
-      success: true,
-      message: "Order cancelled successfully",
-    });
-  } catch (error) {
-    console.error("CANCEL ORDER ERROR:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Unable to cancel order",
-    });
-  }
-});
-
-app.post("/support", authenticateUser, async (req, res) => {
-  try {
-    let { subject, message } = req.body;
-
-    subject = subject?.trim();
-    message = message?.trim();
-
-    if (!subject) {
-      return res.status(400).json({
-        success: false,
-        message: "Subject is required",
-      });
-    }
-
-    if (!message) {
-      return res.status(400).json({
-        success: false,
-        message: "Message is required",
-      });
-    }
-
-    const ticketId =
-      "NV-" + Date.now().toString().slice(-6) + Math.floor(Math.random() * 100);
-
-    const supportTicket = await SupportModel.create({
-      userId: req.user._id,
-      name: req.user.name,
-      email: req.user.email,
-      subject,
-      message,
-      ticketId,
-      status: "Pending",
-    });
-
+app.post(
+  "/cancelOrder",
+  authenticateUser,
+  async (req, res) => {
     try {
-      await sendSupportEmail(supportTicket);
-    } catch (err) {
-      console.error("Email sending failed:", err);
+      const { id } = req.body;
+
+      const order =
+        await OrdersModel.findOne({
+          _id: id,
+          userId: req.user._id,
+        });
+
+      if (!order) {
+        return res.status(404).json({
+          success: false,
+          message: "Order not found",
+        });
+      }
+
+      if (order.status === "COMPLETED") {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Completed orders cannot be cancelled",
+        });
+      }
+
+      order.status = "CANCELLED";
+
+      await order.save();
+
+      return res.json({
+        success: true,
+        message: "Order cancelled successfully",
+      });
+    } catch (error) {
+      console.error(
+        "CANCEL ORDER ERROR:",
+        error,
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          "Unable to cancel order",
+      });
     }
+  },
+);
 
-    return res.status(201).json({
-      success: true,
-      message: "Support ticket created successfully",
-      ticket: supportTicket,
-    });
-  } catch (error) {
-    console.error("SUPPORT ERROR:", error);
+/*
+|--------------------------------------------------------------------------
+| SUPPORT
+|--------------------------------------------------------------------------
+*/
 
-    return res.status(500).json({
-      success: false,
-      message: "Unable to submit support request",
-    });
-  }
-});
+app.post(
+  "/support",
+  authenticateUser,
+  async (req, res) => {
+    try {
+      let { subject, message } = req.body;
 
-app.get("/market/quote/:symbol", async (req, res) => {
-  try {
-    const { symbol } = req.params;
+      subject = subject?.trim();
+      message = message?.trim();
 
-    const result = await getStockQuote(symbol);
+      if (!subject) {
+        return res.status(400).json({
+          success: false,
+          message: "Subject is required",
+        });
+      }
 
-    if (!result.success) {
-      return res.status(500).json(result);
+      if (!message) {
+        return res.status(400).json({
+          success: false,
+          message: "Message is required",
+        });
+      }
+
+      const ticketId =
+        "NV-" +
+        Date.now().toString().slice(-6) +
+        Math.floor(Math.random() * 100);
+
+      const supportTicket =
+        await SupportModel.create({
+          userId: req.user._id,
+          name: req.user.name,
+          email: req.user.email,
+          subject,
+          message,
+          ticketId,
+          status: "Pending",
+        });
+
+      try {
+        await sendSupportEmail(
+          supportTicket,
+        );
+      } catch (err) {
+        console.error(
+          "Email sending failed:",
+          err,
+        );
+      }
+
+      return res.status(201).json({
+        success: true,
+        message:
+          "Support ticket created successfully",
+        ticket: supportTicket,
+      });
+    } catch (error) {
+      console.error(
+        "SUPPORT ERROR:",
+        error,
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          "Unable to submit support request",
+      });
     }
+  },
+);
 
-    return res.status(200).json(result);
-  } catch (error) {
-    console.error("MARKET QUOTE ROUTE ERROR:", error);
+/*
+|--------------------------------------------------------------------------
+| SINGLE MARKET QUOTE
+|--------------------------------------------------------------------------
+*/
 
-    return res.status(500).json({
-      success: false,
-      message: "Unable to fetch market quote",
-    });
-  }
-});
+app.get(
+  "/market/quote/:symbol",
+  async (req, res) => {
+    try {
+      const { symbol } = req.params;
 
-app.get("/market/history/:symbol", async (req, res) => {
-  try {
-    const { symbol } = req.params;
+      const result =
+        await getStockQuote(symbol);
 
-    const yahooSymbolMap = {
-      INFY: "INFY.NS",
-      ONGC: "ONGC.NS",
-      TCS: "TCS.NS",
-      KPITTECH: "KPITTECH.NS",
-      QUICKHEAL: "QUICKHEAL.NS",
-      WIPRO: "WIPRO.NS",
-      "M&M": "M&M.NS",
-      RELIANCE: "RELIANCE.NS",
-      HUL: "HINDUNILVR.NS",
-      HINDUNILVR: "HINDUNILVR.NS",
-      SBIN: "SBIN.NS",
-      ITC: "ITC.NS",
-      BHARTIARTL: "BHARTIARTL.NS",
-      TATAPOWER: "TATAPOWER.NS",
-      HDFCBANK: "HDFCBANK.NS",
-      EVEREADY: "EVEREADY.NS",
-      JUBLFOOD: "JUBLFOOD.NS",
-    };
+      if (!result.success) {
+        return res.status(500).json(result);
+      }
 
-    const yahooSymbol =
-      yahooSymbolMap[symbol] || `${symbol}.NS`;
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error(
+        "MARKET QUOTE ROUTE ERROR:",
+        error,
+      );
 
-    const result = await getStockHistory(yahooSymbol);
-
-    if (!result.success) {
-      return res.status(500).json(result);
+      return res.status(500).json({
+        success: false,
+        message:
+          "Unable to fetch market quote",
+      });
     }
+  },
+);
 
-    return res.status(200).json(result);
-  } catch (error) {
-    console.error("MARKET HISTORY ROUTE ERROR:", error);
+/*
+|--------------------------------------------------------------------------
+| HISTORICAL MARKET DATA
+|--------------------------------------------------------------------------
+*/
 
-    return res.status(500).json({
-      success: false,
-      message: "Unable to fetch historical market data",
-    });
-  }
-});
+app.get(
+  "/market/history/:symbol",
+  async (req, res) => {
+    try {
+      const { symbol } = req.params;
+
+      const yahooSymbolMap = {
+        INFY: "INFY.NS",
+        ONGC: "ONGC.NS",
+        TCS: "TCS.NS",
+        KPITTECH: "KPITTECH.NS",
+        QUICKHEAL: "QUICKHEAL.NS",
+        WIPRO: "WIPRO.NS",
+        "M&M": "M&M.NS",
+        RELIANCE: "RELIANCE.NS",
+        HUL: "HINDUNILVR.NS",
+        HINDUNILVR: "HINDUNILVR.NS",
+        SBIN: "SBIN.NS",
+        ITC: "ITC.NS",
+        BHARTIARTL: "BHARTIARTL.NS",
+        TATAPOWER: "TATAPOWER.NS",
+        HDFCBANK: "HDFCBANK.NS",
+        EVEREADY: "EVEREADY.NS",
+        JUBLFOOD: "JUBLFOOD.NS",
+      };
+
+      const yahooSymbol =
+        yahooSymbolMap[symbol] ||
+        `${symbol}.NS`;
+
+      const result =
+        await getStockHistory(yahooSymbol);
+
+      if (!result.success) {
+        return res.status(500).json(result);
+      }
+
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error(
+        "MARKET HISTORY ROUTE ERROR:",
+        error,
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          "Unable to fetch historical market data",
+      });
+    }
+  },
+);
+
+/*
+|--------------------------------------------------------------------------
+| DATABASE CONNECTION
+|--------------------------------------------------------------------------
+*/
 
 mongoose
   .connect(uri)
@@ -1187,9 +1406,14 @@ mongoose
     console.log("DB connected!");
 
     app.listen(PORT, () => {
-      console.log(`App Started on PORT ${PORT}`);
+      console.log(
+        `App Started on PORT ${PORT}`,
+      );
     });
   })
   .catch((error) => {
-    console.error("DATABASE CONNECTION ERROR:", error);
+    console.error(
+      "DATABASE CONNECTION ERROR:",
+      error,
+    );
   });
